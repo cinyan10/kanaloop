@@ -79,24 +79,39 @@ export function clearProgress(storage: Storage): void {
   storage.removeItem(STORAGE_KEY);
 }
 
-export function selectCards(kana: Kana[], mode: DrillMode): Kana[] {
-  return mode === "both" ? kana : kana.filter((card) => card.script === mode);
+export function selectCards(kana: Kana[], mode: DrillMode, selectedIds?: ReadonlySet<string>): Kana[] {
+  return kana.filter((card) => (mode === "both" || card.script === mode) && (!selectedIds || selectedIds.has(card.id)));
 }
 
 export function selectNextCard(
   kana: Kana[],
   progress: ProgressState,
   mode: DrillMode,
-  now = Date.now()
+  now = Date.now(),
+  selectedIds?: ReadonlySet<string>,
+  random = Math.random
 ): Kana | null {
-  const candidates = selectCards(kana, mode);
+  const candidates = selectCards(kana, mode, selectedIds);
   if (candidates.length === 0) {
     return null;
   }
 
-  return candidates
-    .map((card) => ({ card, score: scoreCard(progress.cards[card.id] ?? createRecord(now), now) }))
-    .sort((a, b) => b.score - a.score || a.card.id.localeCompare(b.card.id))[0].card;
+  const scored = candidates.map((card) => ({ card, score: scoreCard(progress.cards[card.id] ?? createRecord(now), now) }));
+  const maxScore = Math.max(...scored.map((item) => item.score));
+  const pool = scored.filter((item) => item.score >= maxScore - 50);
+  const minScore = Math.min(...pool.map((item) => item.score));
+  const weighted = pool.map((item) => ({ ...item, weight: item.score - minScore + 1 }));
+  const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let pick = random() * totalWeight;
+
+  for (const item of weighted) {
+    pick -= item.weight;
+    if (pick <= 0) {
+      return item.card;
+    }
+  }
+
+  return weighted[weighted.length - 1].card;
 }
 
 export function gradeCard(
@@ -129,8 +144,14 @@ export function gradeCard(
   };
 }
 
-export function summarize(kana: Kana[], progress: ProgressState, mode: DrillMode, now = Date.now()) {
-  const cards = selectCards(kana, mode);
+export function summarize(
+  kana: Kana[],
+  progress: ProgressState,
+  mode: DrillMode,
+  now = Date.now(),
+  selectedIds?: ReadonlySet<string>
+) {
+  const cards = selectCards(kana, mode, selectedIds);
   let due = 0;
   let recognized = 0;
   let learning = 0;

@@ -21,3 +21,7 @@ npm run build
 - Build command: `npm run build`
 - Output directory: `dist`
 - Runtime: static assets only, no server functions required
+
+## Audio
+
+Basic kana MP3 samples in `public/sounds/` are from [`digitaIfabric/japanese`](https://github.com/digitaIfabric/japanese). That repository does not currently publish an explicit license file.

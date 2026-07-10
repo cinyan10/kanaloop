@@ -72,6 +72,13 @@ h1 {
   background: rgba(255, 255, 255, 0.48);
 }
 
+.topbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .tab {
   min-height: 40px;
   padding: 0 16px;
@@ -95,7 +102,8 @@ h1 {
 }
 
 .prompt-panel,
-.progress-panel {
+.progress-panel,
+.settings-panel {
   border: 1px solid rgba(33, 31, 26, 0.14);
   border-radius: 8px;
   background: rgba(255, 252, 244, 0.72);
@@ -223,9 +231,121 @@ h1 {
   background: #f2d6cc;
 }
 
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: center;
+  color: #706858;
+  text-align: center;
+}
+
+.settings-panel {
+  padding: clamp(18px, 4vw, 34px);
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgba(33, 31, 26, 0.12);
+}
+
+.settings-header h2,
+.script-settings h3 {
+  margin: 4px 0 0;
+  text-transform: capitalize;
+}
+
+.settings-header h2 {
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  line-height: 1;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px;
+  margin-top: 24px;
+}
+
+.script-settings {
+  min-width: 0;
+}
+
+.script-settings h3 {
+  color: #1e4f47;
+  font-size: 1.2rem;
+}
+
+.row-settings {
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(33, 31, 26, 0.1);
+}
+
+.row-toggle,
+.kana-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.row-toggle {
+  gap: 10px;
+  font-weight: 800;
+}
+
+.row-toggle small {
+  margin-left: auto;
+  color: #706858;
+  font-weight: 700;
+}
+
+.kana-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.kana-toggle {
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid rgba(33, 31, 26, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.kana-toggle span {
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  font-size: 1.35rem;
+}
+
+.kana-toggle small {
+  color: #706858;
+  font-weight: 700;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #1e4f47;
+}
+
 @media (max-width: 780px) {
   .topbar,
-  .drill-layout {
+  .drill-layout,
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
@@ -236,6 +356,16 @@ h1 {
 
   .mode-tabs {
     width: 100%;
+  }
+
+  .topbar-controls,
+  .settings-header,
+  .settings-actions {
+    width: 100%;
+  }
+
+  .settings-header {
+    flex-direction: column;
   }
 
   .tab {

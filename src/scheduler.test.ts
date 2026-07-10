@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KANA } from "./kana";
+import { createSettings, loadSettings, saveSettings, SETTINGS_KEY } from "./settings";
 import {
   createProgress,
   gradeCard,
@@ -53,6 +54,18 @@ describe("scheduler", () => {
     expect(selectCards(KANA, "hiragana").every((card) => card.script === "hiragana")).toBe(true);
     expect(selectCards(KANA, "katakana").every((card) => card.script === "katakana")).toBe(true);
   });
+
+  it("filters by selected kana", () => {
+    const selectedIds = new Set([KANA[0].id]);
+
+    expect(selectCards(KANA, "both", selectedIds)).toEqual([KANA[0]]);
+  });
+
+  it("randomizes equal-priority new cards", () => {
+    const progress = createProgress(KANA, NOW);
+
+    expect(selectNextCard([KANA[0], KANA[1]], progress, "both", NOW, undefined, () => 0.9)).toEqual(KANA[1]);
+  });
 });
 
 describe("progress persistence", () => {
@@ -70,6 +83,22 @@ describe("progress persistence", () => {
 
     expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "{}").cards[KANA[0].id].streak).toBe(1);
     expect(loadProgress(storage, KANA, NOW).cards[KANA[0].id].streak).toBe(1);
+  });
+
+  it("loads settings defaults with every kana selected", () => {
+    const storage = new StorageStub();
+
+    expect(loadSettings(storage, KANA).selectedKanaIds).toHaveLength(KANA.length);
+  });
+
+  it("round-trips selected kana settings", () => {
+    const storage = new StorageStub();
+    const settings = { ...createSettings(KANA), selectedKanaIds: [KANA[0].id] };
+
+    saveSettings(storage, settings);
+
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY) ?? "{}").selectedKanaIds).toEqual([KANA[0].id]);
+    expect(loadSettings(storage, KANA).selectedKanaIds).toEqual([KANA[0].id]);
   });
 });
 
