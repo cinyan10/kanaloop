@@ -9,8 +9,7 @@ import {
   gradeCard,
   loadProgress,
   saveProgress,
-  selectNextCard,
-  summarize
+  selectNextCard
 } from "./scheduler";
 
 const MODES: { label: string; value: DrillMode }[] = [
@@ -18,6 +17,22 @@ const MODES: { label: string; value: DrillMode }[] = [
   { label: "Hiragana", value: "hiragana" },
   { label: "Katakana", value: "katakana" }
 ];
+
+const NORMAL_TABLE_ROWS = [
+  { label: "∅", groupId: "vowels", romaji: ["a", "i", "u", "e", "o"] },
+  { label: "k", groupId: "k", romaji: ["ka", "ki", "ku", "ke", "ko"] },
+  { label: "s", groupId: "s", romaji: ["sa", "shi", "su", "se", "so"] },
+  { label: "t", groupId: "t", romaji: ["ta", "chi", "tsu", "te", "to"] },
+  { label: "n", groupId: "n", romaji: ["na", "ni", "nu", "ne", "no"] },
+  { label: "h", groupId: "h", romaji: ["ha", "hi", "fu", "he", "ho"] },
+  { label: "m", groupId: "m", romaji: ["ma", "mi", "mu", "me", "mo"] },
+  { label: "y", groupId: "y", romaji: ["ya", null, "yu", null, "yo"] },
+  { label: "r", groupId: "r", romaji: ["ra", "ri", "ru", "re", "ro"] },
+  { label: "w", groupId: "w-n", romaji: ["wa", null, null, null, "wo"] },
+  { label: "n", groupId: "w-n", romaji: [null, null, "n", null, null] }
+] as const;
+
+const VOWEL_COLUMNS = ["a", "i", "u", "e", "o"] as const;
 
 type HistoryEntry = {
   cardId: string;
@@ -31,13 +46,17 @@ export default function App() {
   const [settings, setSettings] = useState(() => loadSettings(window.localStorage, KANA));
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [spoken, setSpoken] = useState<"idle" | "recording" | "tts" | "unavailable">("idle");
   const speechReady = canSpeak();
   const selectedIds = useMemo(() => new Set(settings.selectedKanaIds), [settings.selectedKanaIds]);
 
   const activeCard = useMemo(() => KANA.find((card) => card.id === activeCardId) ?? null, [activeCardId]);
-  const stats = useMemo(() => summarize(KANA, progress, mode, Date.now(), selectedIds), [progress, mode, selectedIds]);
+  const selectedCount = useMemo(
+    () => KANA.filter((card) => (mode === "both" || card.script === mode) && selectedIds.has(card.id)).length,
+    [mode, selectedIds]
+  );
 
   const persist = useCallback((nextProgress: typeof progress) => {
     setProgress(nextProgress);
@@ -46,10 +65,10 @@ export default function App() {
 
   const chooseNextCard = useCallback(
     (nextProgress: ProgressState, excludeId?: string | null): Kana | null => {
-      const pool = excludeId && stats.total > 1 ? KANA.filter((card) => card.id !== excludeId) : KANA;
+      const pool = excludeId && selectedCount > 1 ? KANA.filter((card) => card.id !== excludeId) : KANA;
       return selectNextCard(pool, nextProgress, mode, Date.now(), selectedIds);
     },
-    [mode, selectedIds, stats.total]
+    [mode, selectedCount, selectedIds]
   );
 
   const leaveAnswerMode = useCallback(() => {
@@ -138,10 +157,6 @@ export default function App() {
 
   const setAll = useCallback(() => persistSettings(KANA.map((card) => card.id)), [persistSettings]);
   const setNone = useCallback(() => persistSettings([]), [persistSettings]);
-  const setFirstFiveRows = useCallback(() => {
-    const firstFive = new Set(["vowels", "k", "s", "t", "n"]);
-    persistSettings(KANA.filter((card) => firstFive.has(card.groupId)).map((card) => card.id));
-  }, [persistSettings]);
 
   const toggleIds = useCallback(
     (ids: string[], enabled: boolean) => {
@@ -160,6 +175,16 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isHelpOpen) {
+        event.preventDefault();
+        setIsHelpOpen(false);
+        return;
+      }
+
+      if (isHelpOpen) {
+        return;
+      }
+
       if (view !== "drill" || isTypingTarget(event.target)) {
         return;
       }
@@ -196,48 +221,66 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [grade, previous, reveal, skip, view]);
+  }, [grade, isHelpOpen, previous, reveal, skip, view]);
 
   return (
     <main className="app-shell">
       <section className="workspace" aria-labelledby="app-title">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">KanaLoop</p>
-            <h1 id="app-title">Kana drill</h1>
+        <nav className="navbar" aria-label="Primary">
+          <button
+            aria-label="Home"
+            className={view === "drill" ? "icon-button active" : "icon-button"}
+            onClick={() => setView("drill")}
+            title="Home"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+              <path d="m3 11 9-8 9 8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              <path d="M5 10v10h14V10" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              <path d="M9 20v-6h6v6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          </button>
+          <h1 id="app-title">KanaLoop</h1>
+          <div className="nav-actions">
+            <button
+              aria-label="Shortcut guide"
+              className="icon-button"
+              onClick={() => setIsHelpOpen(true)}
+              title="Shortcut guide"
+              type="button"
+            >
+              <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+                <path d="M9.1 9a3 3 0 1 1 5.8 1c-.6 1.4-2.9 1.7-2.9 3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <path d="M12 17h.01" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+                <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+            </button>
+            <button
+              aria-label="Settings"
+              className={view === "settings" ? "icon-button active" : "icon-button"}
+              onClick={() => setView("settings")}
+              title="Settings"
+              type="button"
+            >
+              <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
+                <path
+                  d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.17.39.38.72.6 1 .3.26.7.4 1.1.4H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
+            </button>
           </div>
-          <div className="topbar-controls">
-            <div className="mode-tabs" aria-label="Choose view">
-              <button className={view === "drill" ? "tab active" : "tab"} onClick={() => setView("drill")} type="button">
-                Drill
-              </button>
-              <button
-                className={view === "settings" ? "tab active" : "tab"}
-                onClick={() => setView("settings")}
-                type="button"
-              >
-                Settings
-              </button>
-            </div>
-            <div className="mode-tabs" aria-label="Choose kana set">
-              {MODES.map((item) => (
-                <button
-                  className={mode === item.value ? "tab active" : "tab"}
-                  key={item.value}
-                  onClick={() => {
-                    setMode(item.value);
-                    setActiveCardId(null);
-                    setHistory([]);
-                    leaveAnswerMode();
-                  }}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </header>
+        </nav>
 
         {view === "drill" ? (
           <div className="drill-layout">
@@ -254,24 +297,23 @@ export default function App() {
                       </button>
                     ) : (
                       <>
-                        <button className="secondary" onClick={() => grade("forgot")} type="button">
-                          Forgot
+                        <button aria-label="Forgot" className="grade-button forgot" onClick={() => grade("forgot")} type="button">
+                          <span aria-hidden="true">×</span>
                         </button>
-                        <button className="primary" onClick={() => grade("remembered")} type="button">
-                          Remembered
+                        <button
+                          aria-label="Remembered"
+                          className="grade-button remembered"
+                          onClick={() => grade("remembered")}
+                          type="button"
+                        >
+                          <span aria-hidden="true">✓</span>
                         </button>
                       </>
                     )}
                   </div>
-                  <p className="audio-state">
-                    {spoken === "recording"
-                      ? "Recorded pronunciation played."
-                      : spoken === "tts"
-                        ? "Browser pronunciation played."
-                        : spoken === "unavailable" || (!speechReady && !activeCard.audioUrl)
-                        ? "Speech is unavailable in this browser."
-                        : "Reveal plays Japanese pronunciation."}
-                  </p>
+                  {spoken === "unavailable" && !speechReady && !activeCard.audioUrl ? (
+                    <p className="audio-state">Speech is unavailable in this browser.</p>
+                  ) : null}
                 </>
               ) : (
                 <div className="empty-state">
@@ -282,39 +324,6 @@ export default function App() {
                 </div>
               )}
             </section>
-
-            <aside className="progress-panel" aria-label="Progress summary">
-              <div className="stat-block">
-                <span>Due now</span>
-                <strong>{stats.due}</strong>
-              </div>
-              <div className="stat-grid">
-                <div>
-                  <span>Selected</span>
-                  <strong>{stats.total}</strong>
-                </div>
-                <div>
-                  <span>Recognized</span>
-                  <strong>
-                    {stats.recognized}/{stats.total}
-                  </strong>
-                </div>
-                <div>
-                  <span>Learning</span>
-                  <strong>{stats.learning}</strong>
-                </div>
-                <div>
-                  <span>Best streak</span>
-                  <strong>{stats.bestStreak}</strong>
-                </div>
-              </div>
-              <div className="meter" aria-label={`${stats.recognized} of ${stats.total} recognized`}>
-                <span style={{ width: `${stats.total ? (stats.recognized / stats.total) * 100 : 0}%` }} />
-              </div>
-              <button className="reset" onClick={reset} type="button">
-                Reset local progress
-              </button>
-            </aside>
           </div>
         ) : (
           <section className="settings-panel" aria-label="Kana settings">
@@ -324,14 +333,31 @@ export default function App() {
                 <h2>Choose drill kana</h2>
               </div>
               <div className="settings-actions">
-                <button className="secondary" onClick={setFirstFiveRows} type="button">
-                  First 5 rows
-                </button>
+                <div className="mode-tabs" aria-label="Choose kana set">
+                  {MODES.map((item) => (
+                    <button
+                      className={mode === item.value ? "tab active" : "tab"}
+                      key={item.value}
+                      onClick={() => {
+                        setMode(item.value);
+                        setActiveCardId(null);
+                        setHistory([]);
+                        leaveAnswerMode();
+                      }}
+                      type="button"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
                 <button className="secondary" onClick={setAll} type="button">
                   Check all
                 </button>
                 <button className="secondary" onClick={setNone} type="button">
                   Uncheck all
+                </button>
+                <button className="reset" onClick={reset} type="button">
+                  Reset progress
                 </button>
               </div>
             </div>
@@ -340,7 +366,56 @@ export default function App() {
               {(["hiragana", "katakana"] as const).map((script) => (
                 <div className="script-settings" key={script}>
                   <h3>{script}</h3>
-                  {KANA_GROUPS.filter((group) => group.script === script).map((group) => {
+                  <div className="kana-table" role="table" aria-label={`${script} normal kana`}>
+                    <div className="kana-table-row header" role="row">
+                      <span role="columnheader" />
+                      {VOWEL_COLUMNS.map((column) => (
+                        <span key={column} role="columnheader">
+                          {column}
+                        </span>
+                      ))}
+                    </div>
+                    {NORMAL_TABLE_ROWS.map((row, rowIndex) => {
+                      const rowCards = row.romaji
+                        .map((romaji) => (romaji ? findKana(script, row.groupId, romaji) : null))
+                        .filter((card): card is Kana => Boolean(card));
+                      const rowIds = rowCards.map((card) => card.id);
+                      const checkedCount = rowIds.filter((id) => selectedIds.has(id)).length;
+                      return (
+                        <div className="kana-table-row" key={`${row.label}-${rowIndex}`} role="row">
+                          <label className="table-row-toggle" role="rowheader">
+                            <input
+                              checked={rowIds.length > 0 && checkedCount === rowIds.length}
+                              onChange={(event) => toggleIds(rowIds, event.target.checked)}
+                              type="checkbox"
+                            />
+                            <span>{row.label}</span>
+                          </label>
+                          {row.romaji.map((romaji, columnIndex) => {
+                            const card = romaji ? findKana(script, row.groupId, romaji) : null;
+                            return card ? (
+                              <label
+                                className={selectedIds.has(card.id) ? "kana-table-cell selected" : "kana-table-cell"}
+                                key={card.id}
+                                role="cell"
+                              >
+                                <input
+                                  checked={selectedIds.has(card.id)}
+                                  onChange={(event) => toggleIds([card.id], event.target.checked)}
+                                  type="checkbox"
+                                />
+                                <span>{card.kana}</span>
+                                <small>{card.romaji}</small>
+                              </label>
+                            ) : (
+                              <span className="kana-table-cell empty" key={`${row.label}-${columnIndex}`} role="cell" />
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {KANA_GROUPS.filter((group) => group.script === script && group.id.endsWith(":dakuten")).map((group) => {
                     const ids = group.kana.map((card) => card.id);
                     const checkedCount = ids.filter((id) => selectedIds.has(id)).length;
                     const allChecked = checkedCount === ids.length;
@@ -359,7 +434,7 @@ export default function App() {
                         </label>
                         <div className="kana-toggles">
                           {group.kana.map((card) => (
-                            <label className="kana-toggle" key={card.id}>
+                            <label className={selectedIds.has(card.id) ? "kana-toggle selected" : "kana-toggle"} key={card.id}>
                               <input
                                 checked={selectedIds.has(card.id)}
                                 onChange={(event) => toggleIds([card.id], event.target.checked)}
@@ -378,6 +453,46 @@ export default function App() {
             </div>
           </section>
         )}
+        {isHelpOpen ? (
+          <div className="dialog-backdrop" onClick={() => setIsHelpOpen(false)}>
+            <section
+              aria-labelledby="shortcut-title"
+              aria-modal="true"
+              className="shortcut-dialog"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+            >
+              <div className="dialog-header">
+                <h2 id="shortcut-title">Shortcuts</h2>
+                <button aria-label="Close shortcut guide" className="icon-button" onClick={() => setIsHelpOpen(false)} type="button">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+              <dl className="shortcut-list">
+                <div>
+                  <dt>Space</dt>
+                  <dd>Reveal answer</dd>
+                </div>
+                <div>
+                  <dt>→</dt>
+                  <dd>Skip card</dd>
+                </div>
+                <div>
+                  <dt>←</dt>
+                  <dd>Previous card</dd>
+                </div>
+                <div>
+                  <dt>↑</dt>
+                  <dd>Forgot</dd>
+                </div>
+                <div>
+                  <dt>↓</dt>
+                  <dd>Remembered</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        ) : null}
       </section>
     </main>
   );
@@ -388,4 +503,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
     return false;
   }
   return target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
+}
+
+function findKana(script: "hiragana" | "katakana", groupId: string, romaji: string): Kana | null {
+  return KANA.find((card) => card.script === script && card.groupId === groupId && card.romaji === romaji) ?? null;
 }

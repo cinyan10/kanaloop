@@ -2,6 +2,8 @@
   "name": "kanaloop",
   "private": true,
   "version": "0.1.0",
+  "description": "A browser-based hiragana and katakana drill app with local progress tracking and pronunciation audio.",
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
