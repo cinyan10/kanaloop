@@ -3,6 +3,7 @@ import type { Kana } from "./kana";
 export type DrillSettings = {
   version: 1;
   selectedKanaIds: string[];
+  inputModeEnabled: boolean;
 };
 
 export const SETTINGS_KEY = "kanaloop.settings.v1";
@@ -10,7 +11,8 @@ export const SETTINGS_KEY = "kanaloop.settings.v1";
 export function createSettings(kana: Kana[]): DrillSettings {
   return {
     version: 1,
-    selectedKanaIds: kana.map((card) => card.id)
+    selectedKanaIds: kana.map((card) => card.id),
+    inputModeEnabled: false
   };
 }
 
@@ -27,7 +29,8 @@ export function normalizeSettings(value: unknown, kana: Kana[]): DrillSettings {
 
   return {
     version: 1,
-    selectedKanaIds: selectedKanaIds.filter((id): id is string => typeof id === "string" && allIds.has(id))
+    selectedKanaIds: selectedKanaIds.filter((id): id is string => typeof id === "string" && allIds.has(id)),
+    inputModeEnabled: (value as { inputModeEnabled?: unknown }).inputModeEnabled === true
   };
 }
 

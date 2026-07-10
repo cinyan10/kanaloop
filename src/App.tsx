@@ -3,6 +3,7 @@ import { canSpeak, playJapanese, preloadJapanese } from "./audio";
 import { KANA, KANA_GROUPS } from "./kana";
 import type { Kana } from "./kana";
 import { createSettings, loadSettings, saveSettings } from "./settings";
+import type { DrillSettings } from "./settings";
 import type { DrillMode, Grade, ProgressState } from "./scheduler";
 import {
   createProgress,
@@ -48,6 +49,9 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [inputResult, setInputResult] = useState<"idle" | "correct" | "incorrect">("idle");
+  const [inputLocked, setInputLocked] = useState(false);
   const [spoken, setSpoken] = useState<"idle" | "recording" | "tts" | "unavailable">("idle");
   const speechReady = canSpeak();
   const selectedIds = useMemo(() => new Set(settings.selectedKanaIds), [settings.selectedKanaIds]);
@@ -73,17 +77,26 @@ export default function App() {
 
   const leaveAnswerMode = useCallback(() => {
     setRevealed(false);
+    setInputValue("");
+    setInputResult("idle");
+    setInputLocked(false);
     setSpoken("idle");
   }, []);
 
-  const persistSettings = useCallback((selectedKanaIds: string[]) => {
-    const nextSettings = { version: 1 as const, selectedKanaIds };
+  const persistSettings = useCallback((nextSettings: DrillSettings) => {
     setSettings(nextSettings);
     saveSettings(window.localStorage, nextSettings);
     setActiveCardId(null);
     setHistory([]);
     leaveAnswerMode();
   }, [leaveAnswerMode]);
+
+  const updateSelectedKana = useCallback(
+    (selectedKanaIds: string[]) => {
+      persistSettings({ ...settings, selectedKanaIds });
+    },
+    [persistSettings, settings]
+  );
 
   useEffect(() => {
     if (view !== "drill") {
@@ -147,6 +160,18 @@ export default function App() {
     [activeCard, chooseNextCard, leaveAnswerMode, persist, progress]
   );
 
+  const submitInput = useCallback((value = inputValue) => {
+    if (!activeCard || inputLocked || !value.trim()) {
+      return;
+    }
+    const isCorrect = normalizeRomaji(value) === activeCard.romaji;
+    setInputLocked(true);
+    setInputResult(isCorrect ? "correct" : "incorrect");
+    setRevealed(true);
+    playFeedbackSound(isCorrect);
+    window.setTimeout(() => grade(isCorrect ? "remembered" : "forgot"), 650);
+  }, [activeCard, grade, inputLocked, inputValue]);
+
   const reset = useCallback(() => {
     const nextProgress = createProgress(KANA);
     persist(nextProgress);
@@ -155,8 +180,14 @@ export default function App() {
     leaveAnswerMode();
   }, [chooseNextCard, leaveAnswerMode, persist]);
 
-  const setAll = useCallback(() => persistSettings(KANA.map((card) => card.id)), [persistSettings]);
-  const setNone = useCallback(() => persistSettings([]), [persistSettings]);
+  const setAll = useCallback(() => updateSelectedKana(KANA.map((card) => card.id)), [updateSelectedKana]);
+  const setNone = useCallback(() => updateSelectedKana([]), [updateSelectedKana]);
+  const setInputMode = useCallback(
+    (inputModeEnabled: boolean) => {
+      persistSettings({ ...settings, inputModeEnabled });
+    },
+    [persistSettings, settings]
+  );
 
   const toggleIds = useCallback(
     (ids: string[], enabled: boolean) => {
@@ -168,9 +199,9 @@ export default function App() {
           nextIds.delete(id);
         }
       }
-      persistSettings(KANA.filter((card) => nextIds.has(card.id)).map((card) => card.id));
+      updateSelectedKana(KANA.filter((card) => nextIds.has(card.id)).map((card) => card.id));
     },
-    [persistSettings, settings.selectedKanaIds]
+    [settings.selectedKanaIds, updateSelectedKana]
   );
 
   useEffect(() => {
@@ -191,6 +222,10 @@ export default function App() {
 
       if (event.key === " ") {
         event.preventDefault();
+        if (settings.inputModeEnabled && inputValue.trim()) {
+          submitInput();
+          return;
+        }
         void reveal();
         return;
       }
@@ -209,19 +244,27 @@ export default function App() {
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
+        if (!revealed) {
+          void reveal();
+          return;
+        }
         grade("forgot");
         return;
       }
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
+        if (!revealed) {
+          void reveal();
+          return;
+        }
         grade("remembered");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [grade, isHelpOpen, previous, reveal, skip, view]);
+  }, [grade, inputValue, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, view]);
 
   return (
     <main className="app-shell">
@@ -289,14 +332,46 @@ export default function App() {
                 <>
                   <p className="script-label">{activeCard.script}</p>
                   <div className="kana-mark">{activeCard.kana}</div>
+                  {settings.inputModeEnabled ? (
+                    <input
+                      aria-label="Type romaji answer"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoFocus
+                      className={`romaji-input ${inputResult}`}
+                      disabled={inputLocked}
+                      key={activeCard.id}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setInputValue(nextValue);
+                        if (normalizeRomaji(nextValue) === activeCard.romaji) {
+                          submitInput(nextValue);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === " " || event.key === "Enter") {
+                          event.preventDefault();
+                          submitInput();
+                        }
+                      }}
+                      spellCheck={false}
+                      type="text"
+                      value={inputValue}
+                    />
+                  ) : null}
                   <div className={revealed ? "answer revealed" : "answer"}>{revealed ? activeCard.romaji : ""}</div>
-                  <div className="actions">
-                    {!revealed ? (
+                  <div className={settings.inputModeEnabled ? "actions input-actions" : "actions"}>
+                    {settings.inputModeEnabled ? (
+                      <div className={`input-feedback ${inputResult}`} aria-live="polite">
+                        {inputResult === "correct" ? "✓" : inputResult === "incorrect" ? "×" : ""}
+                      </div>
+                    ) : !revealed ? (
                       <button className="primary" onClick={reveal} type="button">
                         Reveal
                       </button>
                     ) : (
-                      <>
+                      <div className="grade-actions" aria-label="Grade answer">
                         <button aria-label="Forgot" className="grade-button forgot" onClick={() => grade("forgot")} type="button">
                           <span aria-hidden="true">×</span>
                         </button>
@@ -308,7 +383,7 @@ export default function App() {
                         >
                           <span aria-hidden="true">✓</span>
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                   {spoken === "unavailable" && !speechReady && !activeCard.audioUrl ? (
@@ -333,34 +408,39 @@ export default function App() {
                 <h2>Choose drill kana</h2>
               </div>
               <div className="settings-actions">
-                <div className="mode-tabs" aria-label="Choose kana set">
-                  {MODES.map((item) => (
-                    <button
-                      className={mode === item.value ? "tab active" : "tab"}
-                      key={item.value}
-                      onClick={() => {
-                        setMode(item.value);
-                        setActiveCardId(null);
-                        setHistory([]);
-                        leaveAnswerMode();
-                      }}
-                      type="button"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
                 <button className="secondary" onClick={setAll} type="button">
                   Check all
                 </button>
                 <button className="secondary" onClick={setNone} type="button">
                   Uncheck all
                 </button>
-                <button className="reset" onClick={reset} type="button">
-                  Reset progress
-                </button>
               </div>
             </div>
+            <div className="settings-mode-tabs mode-tabs" aria-label="Choose kana set">
+              {MODES.map((item) => (
+                <button
+                  className={mode === item.value ? "tab active" : "tab"}
+                  key={item.value}
+                  onClick={() => {
+                    setMode(item.value);
+                    setActiveCardId(null);
+                    setHistory([]);
+                    leaveAnswerMode();
+                  }}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <button
+              aria-pressed={settings.inputModeEnabled}
+              className={settings.inputModeEnabled ? "setting-toggle-button active" : "setting-toggle-button"}
+              onClick={() => setInputMode(!settings.inputModeEnabled)}
+              type="button"
+            >
+              Input mode
+            </button>
 
             <div className="settings-grid">
               {(["hiragana", "katakana"] as const).map((script) => (
@@ -451,6 +531,11 @@ export default function App() {
                 </div>
               ))}
             </div>
+            <div className="settings-footer">
+              <button className="reset" onClick={reset} type="button">
+                Reset progress
+              </button>
+            </div>
           </section>
         )}
         {isHelpOpen ? (
@@ -507,4 +592,29 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 function findKana(script: "hiragana" | "katakana", groupId: string, romaji: string): Kana | null {
   return KANA.find((card) => card.script === script && card.groupId === groupId && card.romaji === romaji) ?? null;
+}
+
+function normalizeRomaji(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function playFeedbackSound(isCorrect: boolean): void {
+  const AudioContextConstructor = window.AudioContext;
+  if (!AudioContextConstructor) {
+    return;
+  }
+
+  const context = new AudioContextConstructor();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = isCorrect ? 660 : 180;
+  gain.gain.setValueAtTime(0.0001, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.onended = () => void context.close();
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.2);
 }

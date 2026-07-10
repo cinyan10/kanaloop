@@ -89,16 +89,18 @@ describe("progress persistence", () => {
     const storage = new StorageStub();
 
     expect(loadSettings(storage, KANA).selectedKanaIds).toHaveLength(KANA.length);
+    expect(loadSettings(storage, KANA).inputModeEnabled).toBe(false);
   });
 
   it("round-trips selected kana settings", () => {
     const storage = new StorageStub();
-    const settings = { ...createSettings(KANA), selectedKanaIds: [KANA[0].id] };
+    const settings = { ...createSettings(KANA), selectedKanaIds: [KANA[0].id], inputModeEnabled: true };
 
     saveSettings(storage, settings);
 
     expect(JSON.parse(storage.getItem(SETTINGS_KEY) ?? "{}").selectedKanaIds).toEqual([KANA[0].id]);
     expect(loadSettings(storage, KANA).selectedKanaIds).toEqual([KANA[0].id]);
+    expect(loadSettings(storage, KANA).inputModeEnabled).toBe(true);
   });
 });
 

@@ -156,13 +156,90 @@ h1 {
   color: #1e4f47;
 }
 
+.romaji-input {
+  width: min(220px, 100%);
+  min-height: 58px;
+  border: 2px solid rgba(33, 31, 26, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #211f1a;
+  font: inherit;
+  font-size: clamp(1.35rem, 4vw, 2rem);
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.romaji-input:focus {
+  border-color: #1e4f47;
+  box-shadow: 0 0 0 4px rgba(30, 79, 71, 0.14);
+}
+
+.romaji-input.correct {
+  border-color: #2f8f58;
+  background: #e3efe9;
+}
+
+.romaji-input.incorrect {
+  border-color: #c84c31;
+  background: #f6ddd5;
+}
+
 .actions {
-  min-height: 56px;
+  min-height: 156px;
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: center;
   margin-top: 20px;
+}
+
+.input-actions {
+  min-height: 70px;
+  margin-top: 12px;
+}
+
+.input-feedback {
+  width: 70px;
+  height: 70px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #fffaf0;
+  font-size: 2.25rem;
+  font-weight: 900;
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    background 140ms ease;
+}
+
+.input-feedback.correct,
+.input-feedback.incorrect {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.input-feedback.correct {
+  background: #2f8f58;
+}
+
+.input-feedback.incorrect {
+  background: #c84c31;
+}
+
+.grade-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
 }
 
 .primary,
@@ -196,14 +273,14 @@ h1 {
 }
 
 .grade-button {
-  width: 56px;
-  height: 56px;
-  min-height: 56px;
+  width: 112px;
+  height: 70px;
+  min-height: 70px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -214,8 +291,8 @@ h1 {
 }
 
 .grade-button.remembered {
-  color: #2f2400;
-  background: #f2c84b;
+  color: #fffaf0;
+  background: #2f8f58;
 }
 
 .audio-state {
@@ -309,8 +386,7 @@ h1 {
   justify-content: space-between;
   gap: 18px;
   align-items: flex-start;
-  padding-bottom: 22px;
-  border-bottom: 1px solid rgba(33, 31, 26, 0.12);
+  padding-bottom: 0;
 }
 
 .settings-header h2,
@@ -331,11 +407,24 @@ h1 {
   gap: 10px;
 }
 
+.settings-mode-tabs {
+  width: fit-content;
+  margin-top: 18px;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 26px;
   margin-top: 24px;
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(33, 31, 26, 0.12);
 }
 
 .script-settings {
@@ -448,6 +537,32 @@ h1 {
   display: flex;
   align-items: center;
   cursor: pointer;
+}
+
+.setting-toggle-button {
+  width: fit-content;
+  margin-top: 18px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(33, 31, 26, 0.15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
+  color: #1e4f47;
+  cursor: pointer;
+  font-weight: 900;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.setting-toggle-button.active {
+  color: #fffaf0;
+  background: #1e4f47;
+}
+
+.setting-toggle-button:hover {
+  transform: translateY(-1px);
 }
 
 .row-toggle {
