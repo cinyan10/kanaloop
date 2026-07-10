@@ -172,6 +172,16 @@ export default function App() {
     window.setTimeout(() => grade(isCorrect ? "remembered" : "forgot"), 650);
   }, [activeCard, grade, inputLocked, inputValue]);
 
+  const updateInputValue = useCallback(
+    (nextValue: string) => {
+      setInputValue(nextValue);
+      if (activeCard && normalizeRomaji(nextValue) === activeCard.romaji) {
+        submitInput(nextValue);
+      }
+    },
+    [activeCard, submitInput]
+  );
+
   const reset = useCallback(() => {
     const nextProgress = createProgress(KANA);
     persist(nextProgress);
@@ -216,7 +226,17 @@ export default function App() {
         return;
       }
 
-      if (view !== "drill" || isTypingTarget(event.target)) {
+      if (view !== "drill") {
+        return;
+      }
+
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const targetIsInput = isTypingTarget(event.target);
+
+      if (targetIsInput && !(settings.inputModeEnabled && event.target instanceof HTMLInputElement)) {
         return;
       }
 
@@ -259,12 +279,26 @@ export default function App() {
           return;
         }
         grade("remembered");
+        return;
+      }
+
+      if (settings.inputModeEnabled && !inputLocked && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === "Backspace") {
+          event.preventDefault();
+          updateInputValue(inputValue.slice(0, -1));
+          return;
+        }
+
+        if (/^[a-zA-Z-]$/.test(event.key)) {
+          event.preventDefault();
+          updateInputValue(inputValue + event.key.toLowerCase());
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [grade, inputValue, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, view]);
+  }, [grade, inputLocked, inputValue, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, updateInputValue, view]);
 
   return (
     <main className="app-shell">
@@ -342,13 +376,7 @@ export default function App() {
                       className={`romaji-input ${inputResult}`}
                       disabled={inputLocked}
                       key={activeCard.id}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        setInputValue(nextValue);
-                        if (normalizeRomaji(nextValue) === activeCard.romaji) {
-                          submitInput(nextValue);
-                        }
-                      }}
+                      onChange={(event) => updateInputValue(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === " " || event.key === "Enter") {
                           event.preventDefault();
