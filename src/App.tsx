@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canSpeak, playJapanese, preloadJapanese } from "./audio";
 import { KANA, KANA_GROUPS } from "./kana";
 import type { Kana } from "./kana";
@@ -34,6 +34,7 @@ const NORMAL_TABLE_ROWS = [
 ] as const;
 
 const VOWEL_COLUMNS = ["a", "i", "u", "e", "o"] as const;
+const RECENT_CARD_LIMIT = 2;
 
 type HistoryEntry = {
   cardId: string;
@@ -53,6 +54,8 @@ export default function App() {
   const [inputResult, setInputResult] = useState<"idle" | "correct" | "incorrect">("idle");
   const [inputLocked, setInputLocked] = useState(false);
   const [spoken, setSpoken] = useState<"idle" | "recording" | "tts" | "unavailable">("idle");
+  const cardShownAt = useRef(Date.now());
+  const recentCardIds = useRef<string[]>([]);
   const speechReady = canSpeak();
   const selectedIds = useMemo(() => new Set(settings.selectedKanaIds), [settings.selectedKanaIds]);
 
@@ -69,13 +72,23 @@ export default function App() {
 
   const chooseNextCard = useCallback(
     (nextProgress: ProgressState, excludeId?: string | null): Kana | null => {
-      const pool = excludeId && selectedCount > 1 ? KANA.filter((card) => card.id !== excludeId) : KANA;
+      const excludedIds = new Set(recentCardIds.current);
+      if (excludeId) {
+        excludedIds.add(excludeId);
+      }
+      const enoughAlternatives = selectedCount > excludedIds.size;
+      const pool = enoughAlternatives ? KANA.filter((card) => !excludedIds.has(card.id)) : KANA;
       return selectNextCard(pool, nextProgress, mode, Date.now(), selectedIds);
     },
     [mode, selectedCount, selectedIds]
   );
 
+  const rememberRecentCard = useCallback((cardId: string) => {
+    recentCardIds.current = [cardId, ...recentCardIds.current.filter((id) => id !== cardId)].slice(0, RECENT_CARD_LIMIT);
+  }, []);
+
   const leaveAnswerMode = useCallback(() => {
+    cardShownAt.current = Date.now();
     setRevealed(false);
     setInputValue("");
     setInputResult("idle");
@@ -87,6 +100,7 @@ export default function App() {
     setSettings(nextSettings);
     saveSettings(window.localStorage, nextSettings);
     setActiveCardId(null);
+    recentCardIds.current = [];
     setHistory([]);
     leaveAnswerMode();
   }, [leaveAnswerMode]);
@@ -128,10 +142,11 @@ export default function App() {
     if (!activeCard) {
       return;
     }
+    rememberRecentCard(activeCard.id);
     setHistory((current) => [...current, { cardId: activeCard.id, progressBefore: progress }]);
     setActiveCardId(chooseNextCard(progress, activeCard.id)?.id ?? activeCard.id);
     leaveAnswerMode();
-  }, [activeCard, chooseNextCard, leaveAnswerMode, progress]);
+  }, [activeCard, chooseNextCard, leaveAnswerMode, progress, rememberRecentCard]);
 
   const previous = useCallback(() => {
     setHistory((current) => {
@@ -147,17 +162,20 @@ export default function App() {
   }, [leaveAnswerMode, persist]);
 
   const grade = useCallback(
-    (result: Grade) => {
+    (result: Grade, considerationMs?: number) => {
       if (!activeCard) {
         return;
       }
-      const nextProgress = gradeCard(progress, activeCard.id, result);
+      const now = Date.now();
+      const answerTime = result === "remembered" ? considerationMs ?? now - cardShownAt.current : undefined;
+      const nextProgress = gradeCard(progress, activeCard.id, result, now, answerTime);
+      rememberRecentCard(activeCard.id);
       setHistory((current) => [...current, { cardId: activeCard.id, progressBefore: progress }]);
       persist(nextProgress);
       setActiveCardId(chooseNextCard(nextProgress, activeCard.id)?.id ?? activeCard.id);
       leaveAnswerMode();
     },
-    [activeCard, chooseNextCard, leaveAnswerMode, persist, progress]
+    [activeCard, chooseNextCard, leaveAnswerMode, persist, progress, rememberRecentCard]
   );
 
   const submitInput = useCallback((value = inputValue) => {
@@ -165,11 +183,12 @@ export default function App() {
       return;
     }
     const isCorrect = normalizeRomaji(value) === activeCard.romaji;
+    const considerationMs = isCorrect ? Date.now() - cardShownAt.current : undefined;
     setInputLocked(true);
     setInputResult(isCorrect ? "correct" : "incorrect");
     setRevealed(true);
     void playJapanese(activeCard).then(setSpoken);
-    window.setTimeout(() => grade(isCorrect ? "remembered" : "forgot"), 650);
+    window.setTimeout(() => grade(isCorrect ? "remembered" : "forgot", considerationMs), 650);
   }, [activeCard, grade, inputLocked, inputValue]);
 
   const updateInputValue = useCallback(
@@ -186,6 +205,7 @@ export default function App() {
     const nextProgress = createProgress(KANA);
     persist(nextProgress);
     setActiveCardId(chooseNextCard(nextProgress)?.id ?? null);
+    recentCardIds.current = [];
     setHistory([]);
     leaveAnswerMode();
   }, [chooseNextCard, leaveAnswerMode, persist]);
@@ -452,6 +472,7 @@ export default function App() {
                   onClick={() => {
                     setMode(item.value);
                     setActiveCardId(null);
+                    recentCardIds.current = [];
                     setHistory([]);
                     leaveAnswerMode();
                   }}
@@ -625,4 +646,3 @@ function findKana(script: "hiragana" | "katakana", groupId: string, romaji: stri
 function normalizeRomaji(value: string): string {
   return value.trim().toLowerCase();
 }
-

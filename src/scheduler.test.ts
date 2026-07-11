@@ -40,6 +40,26 @@ describe("scheduler", () => {
     expect(twice.cards[card.id].intervalDays).toBeGreaterThan(once.cards[card.id].intervalDays);
   });
 
+  it("keeps remembered scheduling unchanged when timing is omitted", () => {
+    const progress = createProgress(KANA, NOW);
+    const card = KANA[0];
+    const next = gradeCard(progress, card.id, "remembered", NOW);
+
+    expect(next.cards[card.id].intervalDays).toBe(0.25);
+    expect(next.cards[card.id].ease).toBe(2.38);
+  });
+
+  it("reviews slow remembered cards sooner than fast remembered cards", () => {
+    const progress = createProgress(KANA, NOW);
+    const card = KANA[0];
+    const fast = gradeCard(progress, card.id, "remembered", NOW, 800);
+    const slow = gradeCard(progress, card.id, "remembered", NOW, 10_000);
+
+    expect(fast.cards[card.id].intervalDays).toBeGreaterThan(slow.cards[card.id].intervalDays);
+    expect(fast.cards[card.id].dueAt).toBeGreaterThan(slow.cards[card.id].dueAt);
+    expect(fast.cards[card.id].ease).toBeGreaterThan(slow.cards[card.id].ease);
+  });
+
   it("returns forgotten cards soon", () => {
     const progress = createProgress(KANA, NOW);
     const card = KANA[0];
@@ -65,6 +85,12 @@ describe("scheduler", () => {
     const progress = createProgress(KANA, NOW);
 
     expect(selectNextCard([KANA[0], KANA[1]], progress, "both", NOW, undefined, () => 0.9)).toEqual(KANA[1]);
+  });
+
+  it("does not use source order as the tie breaker for equal-priority cards", () => {
+    const progress = createProgress(KANA, NOW);
+
+    expect(selectNextCard([KANA[0], KANA[1]], progress, "both", NOW, undefined, () => 0)).toEqual(KANA[1]);
   });
 });
 

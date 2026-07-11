@@ -98,7 +98,7 @@ export function selectNextCard(
 
   const scored = candidates.map((card) => ({ card, score: scoreCard(progress.cards[card.id] ?? createRecord(now), now) }));
   const maxScore = Math.max(...scored.map((item) => item.score));
-  const pool = scored.filter((item) => item.score >= maxScore - 50);
+  const pool = shuffle(scored.filter((item) => item.score >= maxScore - 50), random);
   const minScore = Math.min(...pool.map((item) => item.score));
   const weighted = pool.map((item) => ({ ...item, weight: item.score - minScore + 1 }));
   const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
@@ -114,11 +114,20 @@ export function selectNextCard(
   return weighted[weighted.length - 1].card;
 }
 
+function shuffle<T>(items: T[], random: () => number): T[] {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
 export function gradeCard(
   progress: ProgressState,
   cardId: string,
   grade: Grade,
-  now = Date.now()
+  now = Date.now(),
+  considerationMs?: number
 ): ProgressState {
   const current = progress.cards[cardId] ?? createRecord(now);
   const next =
@@ -133,7 +142,7 @@ export function gradeCard(
           dueAt: now + 30 * 60 * 1000,
           lastReviewedAt: now
         }
-      : rememberCard(current, now);
+      : rememberCard(current, now, considerationMs);
 
   return {
     ...progress,
@@ -174,20 +183,38 @@ export function summarize(
   return { total: cards.length, due, recognized, learning, bestStreak };
 }
 
-function rememberCard(record: ProgressRecord, now: number): ProgressRecord {
+function rememberCard(record: ProgressRecord, now: number, considerationMs?: number): ProgressRecord {
   const streak = record.streak + 1;
+  const timingMultiplier = recallTimingMultiplier(considerationMs);
   const intervalDays =
-    streak === 1 ? 0.25 : streak === 2 ? 1 : Math.max(2, record.intervalDays * record.ease);
+    (streak === 1 ? 0.25 : streak === 2 ? 1 : Math.max(2, record.intervalDays * record.ease)) *
+    timingMultiplier;
   const status: CardStatus = streak >= 5 ? "recognized" : "learning";
   return {
     ...record,
     status,
     streak,
     intervalDays,
-    ease: Math.min(3, record.ease + 0.08),
+    ease: Math.min(3, Math.max(1.3, record.ease + 0.08 * timingMultiplier)),
     dueAt: now + intervalDays * 24 * 60 * 60 * 1000,
     lastReviewedAt: now
   };
+}
+
+function recallTimingMultiplier(considerationMs?: number): number {
+  if (typeof considerationMs !== "number" || !Number.isFinite(considerationMs)) {
+    return 1;
+  }
+
+  const seconds = Math.max(0, considerationMs) / 1000;
+  if (seconds <= 1.5) {
+    return 1.18;
+  }
+  if (seconds >= 8) {
+    return 0.82;
+  }
+
+  return 1.18 - ((seconds - 1.5) / 6.5) * 0.36;
 }
 
 function scoreCard(record: ProgressRecord, now: number): number {
