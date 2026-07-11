@@ -3,7 +3,7 @@ import type { Kana } from "./kana";
 export type PlaybackResult = "recording" | "tts" | "unavailable";
 
 let activeAudio: HTMLAudioElement | null = null;
-const audioCache = new Map<string, HTMLAudioElement>();
+const audioCache = new Map<string, string>();
 
 export function canSpeak(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
@@ -15,15 +15,13 @@ export async function playJapanese(card: Pick<Kana, "kana" | "audioUrl">): Promi
   if (card.audioUrl) {
     try {
       preloadJapanese(card);
-      activeAudio = audioCache.get(card.audioUrl) ?? null;
-      if (!activeAudio) {
-        throw new Error("Audio did not preload");
-      }
-      activeAudio.currentTime = 0;
+      activeAudio = new Audio(audioCache.get(card.audioUrl) ?? card.audioUrl);
+      activeAudio.preload = "auto";
       await activeAudio.play();
       return "recording";
     } catch {
       stopAudio();
+      return "unavailable";
     }
   }
 
@@ -37,10 +35,9 @@ export function preloadJapanese(card: Pick<Kana, "audioUrl">): void {
 
   const audio = document.createElement("audio");
   audio.src = card.audioUrl;
-  audio.crossOrigin = "anonymous";
   audio.preload = "auto";
   audio.load();
-  audioCache.set(card.audioUrl, audio);
+  audioCache.set(card.audioUrl, audio.src);
 }
 
 function speakJapanese(text: string): boolean {

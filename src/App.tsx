@@ -168,7 +168,7 @@ export default function App() {
     setInputLocked(true);
     setInputResult(isCorrect ? "correct" : "incorrect");
     setRevealed(true);
-    playFeedbackSound(isCorrect);
+    void playJapanese(activeCard).then(setSpoken);
     window.setTimeout(() => grade(isCorrect ? "remembered" : "forgot"), 650);
   }, [activeCard, grade, inputLocked, inputValue]);
 
@@ -626,23 +626,3 @@ function normalizeRomaji(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function playFeedbackSound(isCorrect: boolean): void {
-  const AudioContextConstructor = window.AudioContext;
-  if (!AudioContextConstructor) {
-    return;
-  }
-
-  const context = new AudioContextConstructor();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.type = "sine";
-  oscillator.frequency.value = isCorrect ? 660 : 180;
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.onended = () => void context.close();
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.2);
-}
