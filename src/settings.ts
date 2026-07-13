@@ -4,7 +4,12 @@ export type DrillSettings = {
   version: 1;
   selectedKanaIds: string[];
   inputModeEnabled: boolean;
+  showStatsOnMainPage: boolean;
+  learningGoalMinutes: number;
+  learningGoalScope: LearningGoalScope;
 };
+
+export type LearningGoalScope = "daily" | "session";
 
 export const SETTINGS_KEY = "kanaloop.settings.v1";
 
@@ -12,7 +17,10 @@ export function createSettings(kana: Kana[]): DrillSettings {
   return {
     version: 1,
     selectedKanaIds: kana.map((card) => card.id),
-    inputModeEnabled: false
+    inputModeEnabled: false,
+    showStatsOnMainPage: true,
+    learningGoalMinutes: 0,
+    learningGoalScope: "daily"
   };
 }
 
@@ -30,7 +38,11 @@ export function normalizeSettings(value: unknown, kana: Kana[]): DrillSettings {
   return {
     version: 1,
     selectedKanaIds: selectedKanaIds.filter((id): id is string => typeof id === "string" && allIds.has(id)),
-    inputModeEnabled: (value as { inputModeEnabled?: unknown }).inputModeEnabled === true
+    inputModeEnabled: (value as { inputModeEnabled?: unknown }).inputModeEnabled === true,
+    showStatsOnMainPage: (value as { showStatsOnMainPage?: unknown }).showStatsOnMainPage !== false,
+    learningGoalMinutes: normalizeGoalMinutes((value as { learningGoalMinutes?: unknown }).learningGoalMinutes),
+    learningGoalScope:
+      (value as { learningGoalScope?: unknown }).learningGoalScope === "session" ? "session" : "daily"
   };
 }
 
@@ -44,4 +56,11 @@ export function loadSettings(storage: Storage, kana: Kana[]): DrillSettings {
 
 export function saveSettings(storage: Storage, settings: DrillSettings): void {
   storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function normalizeGoalMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
 }

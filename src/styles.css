@@ -119,6 +119,39 @@ h1 {
 .drill-layout {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stats-strip div {
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(33, 31, 26, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 252, 244, 0.72);
+  padding: 12px 14px;
+}
+
+.stats-strip span {
+  color: #706858;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.stats-strip strong {
+  color: #1e4f47;
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  line-height: 1;
 }
 
 .prompt-panel,
@@ -539,9 +572,15 @@ h1 {
   cursor: pointer;
 }
 
+.settings-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .setting-toggle-button {
   width: fit-content;
-  margin-top: 18px;
   min-height: 44px;
   padding: 0 18px;
   border: 1px solid rgba(33, 31, 26, 0.15);
@@ -563,6 +602,65 @@ h1 {
 
 .setting-toggle-button:hover {
   transform: translateY(-1px);
+}
+
+.learning-goal-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+}
+
+.goal-minutes-field {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto 96px auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(33, 31, 26, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  padding: 8px 12px;
+  color: #1e4f47;
+  font-weight: 900;
+}
+
+.goal-minutes-field input {
+  width: 96px;
+  min-height: 36px;
+  border: 1px solid rgba(33, 31, 26, 0.16);
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #211f1a;
+  font: inherit;
+  font-weight: 900;
+  text-align: center;
+}
+
+.goal-minutes-field small {
+  color: #706858;
+  font-weight: 800;
+}
+
+.goal-scope-tabs {
+  min-height: 52px;
+}
+
+.goal-dialog {
+  width: min(420px, 100%);
+  border: 1px solid rgba(33, 31, 26, 0.16);
+  border-radius: 8px;
+  background: #fffaf0;
+  box-shadow: 0 24px 80px rgba(33, 31, 26, 0.22);
+  padding: 22px;
+}
+
+.goal-dialog p {
+  margin: 18px 0 22px;
+  color: #5b5548;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .row-toggle {
@@ -630,6 +728,10 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 780px) {
+  .stats-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -672,5 +774,16 @@ input[type="checkbox"] {
 
   .kana-table-cell span {
     font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .stats-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .goal-minutes-field,
+  .goal-scope-tabs {
+    width: 100%;
   }
 }

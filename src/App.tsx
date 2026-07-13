@@ -12,6 +12,13 @@ import {
   saveProgress,
   selectNextCard
 } from "./scheduler";
+import {
+  loadDailyStats,
+  markDailyGoalPrompted,
+  recordFinishedKana,
+  saveDailyStats,
+  summarizeDailyStats
+} from "./stats";
 
 const MODES: { label: string; value: DrillMode }[] = [
   { label: "Both", value: "both" },
@@ -46,6 +53,10 @@ export default function App() {
   const [view, setView] = useState<"drill" | "settings">("drill");
   const [progress, setProgress] = useState(() => loadProgress(window.localStorage, KANA));
   const [settings, setSettings] = useState(() => loadSettings(window.localStorage, KANA));
+  const [dailyStats, setDailyStats] = useState(() => loadDailyStats(window.localStorage));
+  const [sessionLearningMs, setSessionLearningMs] = useState(0);
+  const [sessionGoalPrompted, setSessionGoalPrompted] = useState(false);
+  const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -64,11 +75,57 @@ export default function App() {
     () => KANA.filter((card) => (mode === "both" || card.script === mode) && selectedIds.has(card.id)).length,
     [mode, selectedIds]
   );
+  const statsSummary = useMemo(() => summarizeDailyStats(dailyStats), [dailyStats]);
+  const learningGoalMs = settings.learningGoalMinutes * 60 * 1000;
 
   const persist = useCallback((nextProgress: typeof progress) => {
     setProgress(nextProgress);
     saveProgress(window.localStorage, nextProgress);
   }, []);
+
+  const persistDailyStats = useCallback((nextStats: typeof dailyStats) => {
+    setDailyStats(nextStats);
+    saveDailyStats(window.localStorage, nextStats);
+  }, []);
+
+  const checkLearningGoal = useCallback(
+    (nextSessionLearningMs: number, nextDailyStats: typeof dailyStats) => {
+      if (learningGoalMs <= 0) {
+        return nextDailyStats;
+      }
+
+      if (settings.learningGoalScope === "session") {
+        if (!sessionGoalPrompted && nextSessionLearningMs >= learningGoalMs) {
+          setSessionGoalPrompted(true);
+          setIsGoalDialogOpen(true);
+        }
+        return nextDailyStats;
+      }
+
+      if (!nextDailyStats.dailyGoalPromptedAt && nextDailyStats.learningMs >= learningGoalMs) {
+        setIsGoalDialogOpen(true);
+        return markDailyGoalPrompted(nextDailyStats);
+      }
+
+      return nextDailyStats;
+    },
+    [learningGoalMs, sessionGoalPrompted, settings.learningGoalScope]
+  );
+
+  const recordLearning = useCallback(
+    (cardId: string, finishedAt: number, recallMs?: number) => {
+      const learningMs = Math.max(0, finishedAt - cardShownAt.current);
+      const nextSessionLearningMs = sessionLearningMs + learningMs;
+      const nextDailyStats = checkLearningGoal(
+        nextSessionLearningMs,
+        recordFinishedKana(dailyStats, cardId, learningMs, recallMs, finishedAt)
+      );
+
+      setSessionLearningMs(nextSessionLearningMs);
+      persistDailyStats(nextDailyStats);
+    },
+    [checkLearningGoal, dailyStats, persistDailyStats, sessionLearningMs]
+  );
 
   const chooseNextCard = useCallback(
     (nextProgress: ProgressState, excludeId?: string | null): Kana | null => {
@@ -142,11 +199,13 @@ export default function App() {
     if (!activeCard) {
       return;
     }
+    const now = Date.now();
+    recordLearning(activeCard.id, now);
     rememberRecentCard(activeCard.id);
     setHistory((current) => [...current, { cardId: activeCard.id, progressBefore: progress }]);
     setActiveCardId(chooseNextCard(progress, activeCard.id)?.id ?? activeCard.id);
     leaveAnswerMode();
-  }, [activeCard, chooseNextCard, leaveAnswerMode, progress, rememberRecentCard]);
+  }, [activeCard, chooseNextCard, leaveAnswerMode, progress, recordLearning, rememberRecentCard]);
 
   const previous = useCallback(() => {
     setHistory((current) => {
@@ -169,13 +228,14 @@ export default function App() {
       const now = Date.now();
       const answerTime = result === "remembered" ? considerationMs ?? now - cardShownAt.current : undefined;
       const nextProgress = gradeCard(progress, activeCard.id, result, now, answerTime);
+      recordLearning(activeCard.id, now, answerTime);
       rememberRecentCard(activeCard.id);
       setHistory((current) => [...current, { cardId: activeCard.id, progressBefore: progress }]);
       persist(nextProgress);
       setActiveCardId(chooseNextCard(nextProgress, activeCard.id)?.id ?? activeCard.id);
       leaveAnswerMode();
     },
-    [activeCard, chooseNextCard, leaveAnswerMode, persist, progress, rememberRecentCard]
+    [activeCard, chooseNextCard, leaveAnswerMode, persist, progress, recordLearning, rememberRecentCard]
   );
 
   const submitInput = useCallback((value = inputValue) => {
@@ -218,6 +278,27 @@ export default function App() {
     },
     [persistSettings, settings]
   );
+  const setShowStatsOnMainPage = useCallback(
+    (showStatsOnMainPage: boolean) => {
+      persistSettings({ ...settings, showStatsOnMainPage });
+    },
+    [persistSettings, settings]
+  );
+  const setLearningGoalMinutes = useCallback(
+    (value: string) => {
+      const learningGoalMinutes = value.trim() === "" ? 0 : Math.max(0, Math.floor(Number(value) || 0));
+      setSessionGoalPrompted(false);
+      persistSettings({ ...settings, learningGoalMinutes });
+    },
+    [persistSettings, settings]
+  );
+  const setLearningGoalScope = useCallback(
+    (learningGoalScope: DrillSettings["learningGoalScope"]) => {
+      setSessionGoalPrompted(false);
+      persistSettings({ ...settings, learningGoalScope });
+    },
+    [persistSettings, settings]
+  );
 
   const toggleIds = useCallback(
     (ids: string[], enabled: boolean) => {
@@ -242,7 +323,13 @@ export default function App() {
         return;
       }
 
-      if (isHelpOpen) {
+      if (event.key === "Escape" && isGoalDialogOpen) {
+        event.preventDefault();
+        setIsGoalDialogOpen(false);
+        return;
+      }
+
+      if (isHelpOpen || isGoalDialogOpen) {
         return;
       }
 
@@ -318,7 +405,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [grade, inputLocked, inputValue, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, updateInputValue, view]);
+  }, [grade, inputLocked, inputValue, isGoalDialogOpen, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, updateInputValue, view]);
 
   return (
     <main className="app-shell">
@@ -381,6 +468,26 @@ export default function App() {
 
         {view === "drill" ? (
           <div className="drill-layout">
+            {settings.showStatsOnMainPage ? (
+              <section className="stats-strip" aria-label="Learning stats">
+                <div>
+                  <span>Session</span>
+                  <strong>{formatLearningTime(sessionLearningMs)}</strong>
+                </div>
+                <div>
+                  <span>Remembered today</span>
+                  <strong>{statsSummary.rememberedCount}</strong>
+                </div>
+                <div>
+                  <span>Avg today</span>
+                  <strong>{formatRecallSpeed(statsSummary.averageRecallMs)}</strong>
+                </div>
+                <div>
+                  <span>Last 10</span>
+                  <strong>{formatRecallSpeed(statsSummary.recentAverageRecallMs)}</strong>
+                </div>
+              </section>
+            ) : null}
             <section className="prompt-panel" aria-live="polite">
               {activeCard ? (
                 <>
@@ -482,14 +589,54 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <button
-              aria-pressed={settings.inputModeEnabled}
-              className={settings.inputModeEnabled ? "setting-toggle-button active" : "setting-toggle-button"}
-              onClick={() => setInputMode(!settings.inputModeEnabled)}
-              type="button"
-            >
-              Input mode
-            </button>
+            <div className="settings-toggle-row">
+              <button
+                aria-pressed={settings.inputModeEnabled}
+                className={settings.inputModeEnabled ? "setting-toggle-button active" : "setting-toggle-button"}
+                onClick={() => setInputMode(!settings.inputModeEnabled)}
+                type="button"
+              >
+                Input mode
+              </button>
+              <button
+                aria-pressed={settings.showStatsOnMainPage}
+                className={settings.showStatsOnMainPage ? "setting-toggle-button active" : "setting-toggle-button"}
+                onClick={() => setShowStatsOnMainPage(!settings.showStatsOnMainPage)}
+                type="button"
+              >
+                Show stats
+              </button>
+            </div>
+            <div className="learning-goal-settings">
+              <label className="goal-minutes-field">
+                <span>Learning goal</span>
+                <input
+                  min="0"
+                  onChange={(event) => setLearningGoalMinutes(event.target.value)}
+                  placeholder="0"
+                  step="1"
+                  type="number"
+                  value={settings.learningGoalMinutes || ""}
+                />
+                <small>minutes</small>
+              </label>
+              <div className="goal-scope-tabs mode-tabs" aria-label="Learning goal scope">
+                <button
+                  className={settings.learningGoalScope === "daily" ? "tab active" : "tab"}
+                  onClick={() => setLearningGoalScope("daily")}
+                  type="button"
+                >
+                  Daily
+                </button>
+                <button
+                  className={settings.learningGoalScope === "session" ? "tab active" : "tab"}
+                  onClick={() => setLearningGoalScope("session")}
+                  type="button"
+                >
+                  Session
+                </button>
+              </div>
+            </div>
 
             <div className="settings-grid">
               {(["hiragana", "katakana"] as const).map((script) => (
@@ -627,6 +774,30 @@ export default function App() {
             </section>
           </div>
         ) : null}
+        {isGoalDialogOpen ? (
+          <div className="dialog-backdrop" onClick={() => setIsGoalDialogOpen(false)}>
+            <section
+              aria-labelledby="goal-title"
+              aria-modal="true"
+              className="goal-dialog"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+            >
+              <div className="dialog-header">
+                <h2 id="goal-title">Goal reached</h2>
+                <button aria-label="Close goal dialog" className="icon-button" onClick={() => setIsGoalDialogOpen(false)} type="button">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+              <p>
+                You reached your {settings.learningGoalScope} learning goal of {settings.learningGoalMinutes} minutes.
+              </p>
+              <button className="primary" onClick={() => setIsGoalDialogOpen(false)} type="button">
+                Continue
+              </button>
+            </section>
+          </div>
+        ) : null}
       </section>
     </main>
   );
@@ -645,4 +816,15 @@ function findKana(script: "hiragana" | "katakana", groupId: string, romaji: stri
 
 function normalizeRomaji(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function formatLearningTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+function formatRecallSpeed(ms: number | null): string {
+  return ms === null ? "–" : `${(ms / 1000).toFixed(1)}s`;
 }
