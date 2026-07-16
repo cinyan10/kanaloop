@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canSpeak, playJapanese, preloadJapanese } from "./audio";
-import { KANA, KANA_GROUPS } from "./kana";
+import { KANA } from "./kana";
 import type { Kana } from "./kana";
 import { createSettings, loadSettings, saveSettings } from "./settings";
 import type { DrillSettings } from "./settings";
@@ -40,12 +40,25 @@ const NORMAL_TABLE_ROWS = [
   { label: "n", groupId: "w-n", romaji: [null, null, "n", null, null] }
 ] as const;
 
+const DAKUTEN_TABLE_ROWS = [
+  { label: "g", kana: { hiragana: ["が", "ぎ", "ぐ", "げ", "ご"], katakana: ["ガ", "ギ", "グ", "ゲ", "ゴ"] } },
+  { label: "z", kana: { hiragana: ["ざ", "じ", "ず", "ぜ", "ぞ"], katakana: ["ザ", "ジ", "ズ", "ゼ", "ゾ"] } },
+  { label: "d", kana: { hiragana: ["だ", "ぢ", "づ", "で", "ど"], katakana: ["ダ", "ヂ", "ヅ", "デ", "ド"] } },
+  { label: "b", kana: { hiragana: ["ば", "び", "ぶ", "べ", "ぼ"], katakana: ["バ", "ビ", "ブ", "ベ", "ボ"] } },
+  { label: "p", kana: { hiragana: ["ぱ", "ぴ", "ぷ", "ぺ", "ぽ"], katakana: ["パ", "ピ", "プ", "ペ", "ポ"] } }
+] as const;
+
 const VOWEL_COLUMNS = ["a", "i", "u", "e", "o"] as const;
 const RECENT_CARD_LIMIT = 2;
 
 type HistoryEntry = {
   cardId: string;
   progressBefore: ProgressState;
+};
+
+type KanaTableRow = {
+  label: string;
+  cards: (Kana | null)[];
 };
 
 export default function App() {
@@ -407,6 +420,52 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [grade, inputLocked, inputValue, isGoalDialogOpen, isHelpOpen, previous, reveal, revealed, settings.inputModeEnabled, skip, submitInput, updateInputValue, view]);
 
+  const renderKanaTable = (script: "hiragana" | "katakana", label: string, rows: KanaTableRow[]) => (
+    <div className="kana-table" role="table" aria-label={`${script} ${label}`}>
+      <div className="kana-table-row header" role="row">
+        <span role="columnheader" />
+        {VOWEL_COLUMNS.map((column) => (
+          <span key={column} role="columnheader">
+            {column}
+          </span>
+        ))}
+      </div>
+      {rows.map((row, rowIndex) => {
+        const rowCards = row.cards.filter((card): card is Kana => Boolean(card));
+        const rowIds = rowCards.map((card) => card.id);
+        const checkedCount = rowIds.filter((id) => selectedIds.has(id)).length;
+
+        return (
+          <div className="kana-table-row" key={`${label}-${row.label}-${rowIndex}`} role="row">
+            <label className="table-row-toggle" role="rowheader">
+              <input
+                checked={rowIds.length > 0 && checkedCount === rowIds.length}
+                onChange={(event) => toggleIds(rowIds, event.target.checked)}
+                type="checkbox"
+              />
+              <span>{row.label}</span>
+            </label>
+            {row.cards.map((card, columnIndex) =>
+              card ? (
+                <label className={selectedIds.has(card.id) ? "kana-table-cell selected" : "kana-table-cell"} key={card.id} role="cell">
+                  <input
+                    checked={selectedIds.has(card.id)}
+                    onChange={(event) => toggleIds([card.id], event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>{card.kana}</span>
+                  <small>{card.romaji}</small>
+                </label>
+              ) : (
+                <span className="kana-table-cell empty" key={`${row.label}-${columnIndex}`} role="cell" />
+              )
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <main className="app-shell">
       <section className="workspace" aria-labelledby="app-title">
@@ -639,93 +698,50 @@ export default function App() {
             </div>
 
             <div className="settings-grid">
-              {(["hiragana", "katakana"] as const).map((script) => (
-                <div className="script-settings" key={script}>
-                  <h3>{script}</h3>
-                  <div className="kana-table" role="table" aria-label={`${script} normal kana`}>
-                    <div className="kana-table-row header" role="row">
-                      <span role="columnheader" />
-                      {VOWEL_COLUMNS.map((column) => (
-                        <span key={column} role="columnheader">
-                          {column}
-                        </span>
-                      ))}
-                    </div>
-                    {NORMAL_TABLE_ROWS.map((row, rowIndex) => {
-                      const rowCards = row.romaji
-                        .map((romaji) => (romaji ? findKana(script, row.groupId, romaji) : null))
-                        .filter((card): card is Kana => Boolean(card));
-                      const rowIds = rowCards.map((card) => card.id);
-                      const checkedCount = rowIds.filter((id) => selectedIds.has(id)).length;
-                      return (
-                        <div className="kana-table-row" key={`${row.label}-${rowIndex}`} role="row">
-                          <label className="table-row-toggle" role="rowheader">
-                            <input
-                              checked={rowIds.length > 0 && checkedCount === rowIds.length}
-                              onChange={(event) => toggleIds(rowIds, event.target.checked)}
-                              type="checkbox"
-                            />
-                            <span>{row.label}</span>
-                          </label>
-                          {row.romaji.map((romaji, columnIndex) => {
-                            const card = romaji ? findKana(script, row.groupId, romaji) : null;
-                            return card ? (
-                              <label
-                                className={selectedIds.has(card.id) ? "kana-table-cell selected" : "kana-table-cell"}
-                                key={card.id}
-                                role="cell"
-                              >
-                                <input
-                                  checked={selectedIds.has(card.id)}
-                                  onChange={(event) => toggleIds([card.id], event.target.checked)}
-                                  type="checkbox"
-                                />
-                                <span>{card.kana}</span>
-                                <small>{card.romaji}</small>
-                              </label>
-                            ) : (
-                              <span className="kana-table-cell empty" key={`${row.label}-${columnIndex}`} role="cell" />
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
+              {(["hiragana", "katakana"] as const).map((script) => {
+                const normalRows = NORMAL_TABLE_ROWS.map((row) => ({
+                  label: row.label,
+                  cards: row.romaji.map((romaji) => (romaji ? findKana(script, row.groupId, romaji) : null))
+                }));
+                const dakutenRows = DAKUTEN_TABLE_ROWS.map((row) => ({
+                  label: row.label,
+                  cards: row.kana[script].map((kana) => findKanaByCharacter(script, kana))
+                }));
+                const normalIds = normalRows.flatMap((row) => row.cards.flatMap((card) => (card ? [card.id] : [])));
+                const dakutenIds = dakutenRows.flatMap((row) => row.cards.flatMap((card) => (card ? [card.id] : [])));
+                const normalCheckedCount = normalIds.filter((id) => selectedIds.has(id)).length;
+                const dakutenCheckedCount = dakutenIds.filter((id) => selectedIds.has(id)).length;
+
+                return (
+                  <div className="script-settings" key={script}>
+                    <h3>{script}</h3>
+                    <label className="row-toggle section-toggle">
+                      <input
+                        checked={normalIds.length > 0 && normalCheckedCount === normalIds.length}
+                        onChange={(event) => toggleIds(normalIds, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Normal</span>
+                      <small>
+                        {normalCheckedCount}/{normalIds.length}
+                      </small>
+                    </label>
+                    {renderKanaTable(script, "normal kana", normalRows)}
+                    <label className="row-toggle section-toggle">
+                      <input
+                        checked={dakutenIds.length > 0 && dakutenCheckedCount === dakutenIds.length}
+                        onChange={(event) => toggleIds(dakutenIds, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Dakuten</span>
+                      <small>
+                        {dakutenCheckedCount}/{dakutenIds.length}
+                      </small>
+                    </label>
+                    {renderKanaTable(script, "dakuten", dakutenRows)}
                   </div>
-                  {KANA_GROUPS.filter((group) => group.script === script && group.id.endsWith(":dakuten")).map((group) => {
-                    const ids = group.kana.map((card) => card.id);
-                    const checkedCount = ids.filter((id) => selectedIds.has(id)).length;
-                    const allChecked = checkedCount === ids.length;
-                    return (
-                      <section className="row-settings" key={group.id}>
-                        <label className="row-toggle">
-                          <input
-                            checked={allChecked}
-                            onChange={(event) => toggleIds(ids, event.target.checked)}
-                            type="checkbox"
-                          />
-                          <span>{group.label}</span>
-                          <small>
-                            {checkedCount}/{ids.length}
-                          </small>
-                        </label>
-                        <div className="kana-toggles">
-                          {group.kana.map((card) => (
-                            <label className={selectedIds.has(card.id) ? "kana-toggle selected" : "kana-toggle"} key={card.id}>
-                              <input
-                                checked={selectedIds.has(card.id)}
-                                onChange={(event) => toggleIds([card.id], event.target.checked)}
-                                type="checkbox"
-                              />
-                              <span>{card.kana}</span>
-                              <small>{card.romaji}</small>
-                            </label>
-                          ))}
-                        </div>
-                      </section>
-                    );
-                  })}
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="settings-footer">
               <button className="reset" onClick={reset} type="button">
@@ -812,6 +828,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 function findKana(script: "hiragana" | "katakana", groupId: string, romaji: string): Kana | null {
   return KANA.find((card) => card.script === script && card.groupId === groupId && card.romaji === romaji) ?? null;
+}
+
+function findKanaByCharacter(script: "hiragana" | "katakana", kana: string): Kana | null {
+  return KANA.find((card) => card.script === script && card.kana === kana) ?? null;
 }
 
 function normalizeRomaji(value: string): string {

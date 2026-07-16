@@ -572,6 +572,10 @@ h1 {
   cursor: pointer;
 }
 
+.section-toggle {
+  margin-top: 14px;
+}
+
 .settings-toggle-row {
   display: flex;
   flex-wrap: wrap;
