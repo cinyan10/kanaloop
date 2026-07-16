@@ -30,4 +30,4 @@ GPL-3.0. See [LICENSE](LICENSE).
 
 ## Audio
 
-Basic kana MP3 samples in `public/sounds/` are from [`digitaIfabric/japanese`](https://github.com/digitaIfabric/japanese). That repository does not currently publish an explicit license file.
+Basic kana MP3 samples in `public/sounds/` are from [`digitaIfabric/japanese`](https://github.com/digitaIfabric/japanese). The voiced and combination kana rows are now bundled as real recordings in `public/sounds/` as well, so dakuten and yoon no longer fall back to system TTS.

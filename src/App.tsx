@@ -48,7 +48,22 @@ const DAKUTEN_TABLE_ROWS = [
   { label: "p", kana: { hiragana: ["ぱ", "ぴ", "ぷ", "ぺ", "ぽ"], katakana: ["パ", "ピ", "プ", "ペ", "ポ"] } }
 ] as const;
 
+const YOON_TABLE_ROWS = [
+  { label: "k", kana: { hiragana: ["きゃ", "きゅ", "きょ"], katakana: ["キャ", "キュ", "キョ"] } },
+  { label: "s", kana: { hiragana: ["しゃ", "しゅ", "しょ"], katakana: ["シャ", "シュ", "ショ"] } },
+  { label: "t", kana: { hiragana: ["ちゃ", "ちゅ", "ちょ"], katakana: ["チャ", "チュ", "チョ"] } },
+  { label: "n", kana: { hiragana: ["にゃ", "にゅ", "にょ"], katakana: ["ニャ", "ニュ", "ニョ"] } },
+  { label: "h", kana: { hiragana: ["ひゃ", "ひゅ", "ひょ"], katakana: ["ヒャ", "ヒュ", "ヒョ"] } },
+  { label: "m", kana: { hiragana: ["みゃ", "みゅ", "みょ"], katakana: ["ミャ", "ミュ", "ミョ"] } },
+  { label: "r", kana: { hiragana: ["りゃ", "りゅ", "りょ"], katakana: ["リャ", "リュ", "リョ"] } },
+  { label: "g", kana: { hiragana: ["ぎゃ", "ぎゅ", "ぎょ"], katakana: ["ギャ", "ギュ", "ギョ"] } },
+  { label: "j", kana: { hiragana: ["じゃ", "じゅ", "じょ"], katakana: ["ジャ", "ジュ", "ジョ"] } },
+  { label: "b", kana: { hiragana: ["びゃ", "びゅ", "びょ"], katakana: ["ビャ", "ビュ", "ビョ"] } },
+  { label: "p", kana: { hiragana: ["ぴゃ", "ぴゅ", "ぴょ"], katakana: ["ピャ", "ピュ", "ピョ"] } }
+] as const;
+
 const VOWEL_COLUMNS = ["a", "i", "u", "e", "o"] as const;
+const YOON_COLUMNS = ["ya", "yu", "yo"] as const;
 const RECENT_CARD_LIMIT = 2;
 
 type HistoryEntry = {
@@ -267,7 +282,8 @@ export default function App() {
   const updateInputValue = useCallback(
     (nextValue: string) => {
       setInputValue(nextValue);
-      if (activeCard && normalizeRomaji(nextValue) === activeCard.romaji) {
+      const typedRomaji = normalizeRomaji(nextValue);
+      if (activeCard && typedRomaji.length >= activeCard.romaji.length) {
         submitInput(nextValue);
       }
     },
@@ -600,8 +616,12 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  {spoken === "unavailable" && !speechReady && !activeCard.audioUrl ? (
-                    <p className="audio-state">Speech is unavailable in this browser.</p>
+                  {spoken === "unavailable" && !activeCard.audioUrl ? (
+                    <p className="audio-state">
+                      {activeCard.groupId === "dakuten" || activeCard.groupId === "yoon"
+                        ? "Recording unavailable for this kana."
+                        : "Speech is unavailable in this browser."}
+                    </p>
                   ) : null}
                 </>
               ) : (
@@ -707,10 +727,16 @@ export default function App() {
                   label: row.label,
                   cards: row.kana[script].map((kana) => findKanaByCharacter(script, kana))
                 }));
+                const yoonRows = YOON_TABLE_ROWS.map((row) => ({
+                  label: row.label,
+                  cards: row.kana[script].map((kana) => findKanaByCharacter(script, kana))
+                }));
                 const normalIds = normalRows.flatMap((row) => row.cards.flatMap((card) => (card ? [card.id] : [])));
                 const dakutenIds = dakutenRows.flatMap((row) => row.cards.flatMap((card) => (card ? [card.id] : [])));
+                const yoonIds = yoonRows.flatMap((row) => row.cards.flatMap((card) => (card ? [card.id] : [])));
                 const normalCheckedCount = normalIds.filter((id) => selectedIds.has(id)).length;
                 const dakutenCheckedCount = dakutenIds.filter((id) => selectedIds.has(id)).length;
+                const yoonCheckedCount = yoonIds.filter((id) => selectedIds.has(id)).length;
 
                 return (
                   <div className="script-settings" key={script}>
@@ -739,6 +765,18 @@ export default function App() {
                       </small>
                     </label>
                     {renderKanaTable(script, "dakuten", dakutenRows)}
+                    <label className="row-toggle section-toggle">
+                      <input
+                        checked={yoonIds.length > 0 && yoonCheckedCount === yoonIds.length}
+                        onChange={(event) => toggleIds(yoonIds, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Yoon</span>
+                      <small>
+                        {yoonCheckedCount}/{yoonIds.length}
+                      </small>
+                    </label>
+                    {renderKanaTable(script, "yoon", yoonRows)}
                   </div>
                 );
               })}

@@ -9,7 +9,7 @@ export function canSpeak(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 }
 
-export async function playJapanese(card: Pick<Kana, "kana" | "audioUrl">): Promise<PlaybackResult> {
+export async function playJapanese(card: Pick<Kana, "kana" | "audioUrl" | "groupId">): Promise<PlaybackResult> {
   stopAudio();
 
   if (card.audioUrl) {
@@ -23,6 +23,10 @@ export async function playJapanese(card: Pick<Kana, "kana" | "audioUrl">): Promi
       stopAudio();
       return "unavailable";
     }
+  }
+
+  if (requiresRecording(card.groupId)) {
+    return "unavailable";
   }
 
   return speakJapanese(card.kana) ? "tts" : "unavailable";
@@ -51,6 +55,10 @@ function speakJapanese(text: string): boolean {
   utterance.rate = 0.85;
   window.speechSynthesis.speak(utterance);
   return true;
+}
+
+function requiresRecording(groupId: string): boolean {
+  return groupId === "dakuten" || groupId === "yoon";
 }
 
 function stopAudio(): void {
